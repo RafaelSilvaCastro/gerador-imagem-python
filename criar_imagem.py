@@ -1,6 +1,7 @@
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 import os
+import math # Para checar valores NaN de forma robusta
 
 # --- Configurações Principais ---
 ARQUIVO_EXCEL = 'promocoes.xlsx'
@@ -17,28 +18,23 @@ ALTURA_BANNER = 1350
 COR_FUNDO = 'white'
 
 # --- Configurações de Área ---
-ALTURA_IMAGEM_PRODUTO_MAX = 680
+ALTURA_IMAGEM_PRODUTO_MAX = 650
 Y_INICIO_AREA_TEXTO = 1000
 LARGURA_MAX_TEXTO = LARGURA_BANNER - 100 
 
 # --- Configurações de Texto e Cores ---
-COR_PRECO_DESTAQUE = (200, 0, 0) 
+COR_PRECO_DESTAQUE = (200, 0, 0) # Vermelho para o preço promocional
 COR_TEXTO_DESCRICAO = (30, 30, 30) 
+COR_PRECO_ANTIGO = (150, 150, 150) # Cinza para o preço riscado
 
-PADDING_LATERAL = 60 
+PADDING_LATERAL = 150 
 TEXT_LINE_SPACING = 20 
 
-# --- CONFIGURAÇÕES PARA O BANNER DE DESTAQUE "PROMOÇÃO" ---
-TEXTO_BANNER_DESTAQUE_PRINCIPAL = "PROMOÇÃO"
-COR_BANNER_DESTAQUE_PRINCIPAL = (255, 204, 0) # Amarelo vibrante
-COR_TEXTO_BANNER_DESTAQUE = 'black'
-
-ALTURA_DESTAQUE_PRINCIPAL = 130
-POS_X_DESTAQUE = 220 # Posição X inicial do banner principal (amarelo)
-POS_Y_DESTAQUE = 200 # Posição Y inicial do banner principal (amarelo) 
+# --- CONFIGURAÇÕES DE FONTE ---
 TAMANHO_FONTE_DESTAQUE_PRINCIPAL = 100
+TAMANHO_FONTE_PRECO_ANTIGO = 55 # Tamanho do preço riscado
 
-# --- Funções Auxiliares ---
+# --- Funções Auxiliais ---
 def get_text_dimensions(draw, text_string, font):
     """Retorna a largura e altura do texto usando draw.textbbox"""
     bbox = draw.textbbox((0, 0), text_string, font=font)
@@ -66,7 +62,6 @@ def wrap_text_to_fit(draw, text, font, max_width):
     lines.append(current_line.strip())
     return lines
 
-# --- FUNÇÃO: Colar o Logo de Imagem ---
 def colar_logo(banner, logo_path, max_height, x_pos, y_pos):
     """Carrega o logo, redimensiona e cola no banner."""
     if not os.path.exists(logo_path):
@@ -76,8 +71,10 @@ def colar_logo(banner, logo_path, max_height, x_pos, y_pos):
     try:
         logo = Image.open(logo_path).convert("RGBA")
         largura_original, altura_original = logo.size
+        # Mantém a proporção ao redimensionar para a altura máxima
         nova_largura = int(largura_original * (max_height / altura_original))
         logo = logo.resize((nova_largura, max_height))
+        # O logo precisa ser colado com o próprio logo como máscara (o 4º argumento) para transparência
         banner.paste(logo, (x_pos, y_pos), logo)
     except Exception as e:
         print(f"AVISO: Erro ao processar o logo: {e}")
@@ -89,8 +86,28 @@ def criar_banners_em_lote():
         os.makedirs(PASTA_SAIDA)
     
     try:
-        df = pd.read_excel(ARQUIVO_EXCEL, dtype={'codigo': str})
+        # ✅ LEITURA ROBUSTA: Lê código como string e preços como float, garantindo consistência.
+        df = pd.read_excel(
+            ARQUIVO_EXCEL, 
+            dtype={'codigo': str}, # Garantimos que o código é lido como string
+            converters={'valor_promocional': float, 'valor_original': float} 
+        )
+        
+        # Normaliza nomes das colunas
+        df.columns = df.columns.str.strip().str.lower()
+        
         print(f"Planilha '{ARQUIVO_EXCEL}' lida com sucesso. Total de {len(df)} promoções encontradas.")
+        
+        colunas_necessarias = ['codigo', 'descricao', 'valor_promocional']
+        for col in colunas_necessarias:
+            if col not in df.columns:
+                print(f"ERRO CRÍTICO: Coluna obrigatória '{col}' não encontrada no Excel.")
+                return
+
+        if 'valor_original' not in df.columns:
+            print("AVISO: Coluna 'valor_original' não encontrada no Excel. Apenas o preço promocional será exibido.")
+            df['valor_original'] = None 
+            
     except Exception as e:
         print(f"ERRO ao ler o Excel: Certifique-se que o arquivo '{ARQUIVO_EXCEL}' existe. Detalhe: {e}")
         return
@@ -99,12 +116,13 @@ def criar_banners_em_lote():
         font_path = NOME_FONTE
         fonte_descricao = ImageFont.truetype(font_path, 45) 
         fonte_valor = ImageFont.truetype(font_path, 100) 
-        # Fontes para os banners de destaque
+        fonte_preco_antigo = ImageFont.truetype(font_path, TAMANHO_FONTE_PRECO_ANTIGO) 
         fonte_destaque_principal = ImageFont.truetype(font_path, TAMANHO_FONTE_DESTAQUE_PRINCIPAL)
     except IOError:
         print(f"AVISO: Fonte '{NOME_FONTE}' não encontrada. Usando fonte padrão. Tente 'arial.ttf'.")
         fonte_descricao = ImageFont.load_default()
         fonte_valor = ImageFont.load_default()
+        fonte_preco_antigo = ImageFont.load_default() 
         fonte_destaque_principal = ImageFont.load_default()
 
 
@@ -114,15 +132,43 @@ def criar_banners_em_lote():
     for index, dados_promo in df.iterrows():
         codigo_produto = None
         try:
+            # --- 1. TRATAMENTO ROBUSTO DO CÓDIGO DO PRODUTO (Corrigido) ---
             if pd.notna(dados_promo['codigo']):
-                codigo_produto = str(dados_promo['codigo']).replace(',', '.') 
+                codigo_str = str(dados_promo['codigo']).strip()
+                
+                # Caso o pandas leia o código como float (ex: '83.0')
+                if codigo_str.endswith('.0'):
+                    codigo_produto = codigo_str[:-2]
+                else:
+                    codigo_produto = codigo_str
             else:
                 codigo_produto = f"ITEM_{index}"
+            
+            # Checa se o código está vazio após o tratamento
+            if not codigo_produto:
+                 print(f"AVISO (Linha {index+2}): Código de produto vazio após tratamento. Pulando.")
+                 continue
 
             descricao_original = str(dados_promo['descricao']).upper().strip()
+            
+            # --- 2. TRATAMENTO ROBUSTO DOS VALORES (Preço) ---
             valor_float = dados_promo['valor_promocional']
             valor_exibicao = f"R$ {valor_float:.2f}".replace('.', ',')
             
+            valor_original_exibicao = None
+            valor_original_float = dados_promo.get('valor_original')
+            
+            # Condição para mostrar o preço antigo: 
+            # Deve ser um número válido, maior que zero E maior que o promocional.
+            if (
+                pd.notna(valor_original_float) and 
+                not math.isnan(valor_original_float) and 
+                valor_original_float > 0 and 
+                valor_original_float > valor_float
+            ):
+                valor_original_exibicao = f"R$ {valor_original_float:.2f}".replace('.', ',')
+            
+            # --- 3. BUSCA ROBUSTA DA IMAGEM ---
             caminho_imagem_base = None
             for ext in EXTENSOES_POSSIVEIS:
                 nome_tentativa = f"{codigo_produto}.{ext}"
@@ -132,91 +178,61 @@ def criar_banners_em_lote():
                     break 
                     
             if caminho_imagem_base is None:
-                print(f"ERRO (Linha {index+2} - Código {codigo_produto}): Imagem não encontrada.")
+                # Agora o erro deve indicar exatamente qual código NÃO FOI ENCONTRADO
+                print(f"ERRO (Linha {index+2} - Código '{codigo_produto}'): Imagem não encontrada. Verifique se o arquivo '{codigo_produto}.(ext)' existe na pasta '{PASTA_IMAGENS_BASE}'.")
                 continue
             
+            # --- Criação do Banner e Fundo --- (Mantido)
             banner_final = None
             try:
-                # Tenta abrir o arquivo de fundo
                 img_fundo = Image.open(IMAGEM_FUNDO_FILE).convert("RGB")
-                
-                # Redimensiona para cobrir todo o banner (Mantém a proporção e corta as bordas)
                 proporcao_banner = LARGURA_BANNER / ALTURA_BANNER
                 proporcao_fundo = img_fundo.width / img_fundo.height
                 
                 if proporcao_fundo > proporcao_banner:
-                    # Fundo é mais largo, redimensiona pela altura
                     nova_altura = ALTURA_BANNER
                     nova_largura = int(img_fundo.width * (nova_altura / img_fundo.height))
                     img_fundo = img_fundo.resize((nova_largura, nova_altura))
-                    # Centraliza
                     x_corte = (nova_largura - LARGURA_BANNER) // 2
                     img_fundo = img_fundo.crop((x_corte, 0, x_corte + LARGURA_BANNER, ALTURA_BANNER))
                 else:
-                    # Fundo é mais alto, redimensiona pela largura
                     nova_largura = LARGURA_BANNER
                     nova_altura = int(img_fundo.height * (nova_largura / img_fundo.width))
                     img_fundo = img_fundo.resize((nova_largura, nova_altura))
-                    # Centraliza
                     y_corte = (nova_altura - ALTURA_BANNER) // 2
                     img_fundo = img_fundo.crop((0, y_corte, LARGURA_BANNER, y_corte + ALTURA_BANNER))
                     
                 banner_final = img_fundo.copy()
-                print(f"Fundo '{IMAGEM_FUNDO_FILE}' adicionado.")
 
             except FileNotFoundError:
-                # Caso o arquivo não exista, usa a cor sólida
-                print(f"AVISO: Arquivo de fundo '{IMAGEM_FUNDO_FILE}' não encontrado. Usando cor sólida.")
                 banner_final = Image.new('RGB', (LARGURA_BANNER, ALTURA_BANNER), color=COR_FUNDO)
-            except Exception as e:
-                print(f"ERRO ao carregar/redimensionar fundo: {e}. Usando cor sólida.")
+            except Exception:
                 banner_final = Image.new('RGB', (LARGURA_BANNER, ALTURA_BANNER), color=COR_FUNDO)
 
 
             draw = ImageDraw.Draw(banner_final)
             
-            # 6. Colocando a Imagem do Produto
+            # Colocando a Imagem do Produto e Logo
             img_produto = Image.open(caminho_imagem_base).convert("RGB")
             img_produto.thumbnail((LARGURA_BANNER, ALTURA_IMAGEM_PRODUTO_MAX))
             x_img_centralizada = (LARGURA_BANNER - img_produto.width) // 2
-            # ⬆️ CORREÇÃO PRINCIPAL AQUI: Mais espaço no topo para a logo
             y_img_centralizada = 300 
             banner_final.paste(img_produto, (x_img_centralizada, y_img_centralizada))
-            
-            # 7. Colocando o Logo de Imagem (Canto Superior Esquerdo)
-            # ⬇️ y_pos mantido para aparecer no topo, agora não será mais coberto
+    
             colar_logo(
                 banner_final, 
                 LOGO_AMAISCICLO_FILE, 
-                max_height=100,  
+                max_height=250,
                 x_pos=PADDING_LATERAL, 
-                y_pos=40
-            )
-
-            # --- Desenha o Banner de Destaque "PROMOÇÃO" ---
-            # ⬇️ POSIÇÕES AJUSTADAS para o banner de destaque, para não colidir com o logo
-            text_promo_w, text_promo_h = get_text_dimensions(draw, TEXTO_BANNER_DESTAQUE_PRINCIPAL, fonte_destaque_principal)
-            
-            x1_amarelo = POS_X_DESTAQUE
-            y1_amarelo = POS_Y_DESTAQUE
-            x2_amarelo = x1_amarelo + text_promo_w + 60 
-            y2_amarelo = y1_amarelo + ALTURA_DESTAQUE_PRINCIPAL
-            
-            draw.rounded_rectangle(
-                (x1_amarelo, y1_amarelo, x2_amarelo, y2_amarelo),
-                radius=20, 
-                fill=COR_BANNER_DESTAQUE_PRINCIPAL
+                y_pos=60
             )
             
-            x_text_promo = x1_amarelo + (x2_amarelo - x1_amarelo - text_promo_w) // 2
-            y_text_promo = y1_amarelo + (ALTURA_DESTAQUE_PRINCIPAL - text_promo_h) // 2
-            desenhar_texto(draw, (x_text_promo, y_text_promo), TEXTO_BANNER_DESTAQUE_PRINCIPAL, fonte_destaque_principal, COR_TEXTO_BANNER_DESTAQUE)
-
-            # --- 8. Área de Descrição e Preço (Rodapé) ---
+            # --- Área de Descrição e Preço (Rodapé) ---
             linhas_descricao = wrap_text_to_fit(draw, descricao_original, fonte_descricao, LARGURA_MAX_TEXTO)
             
             current_y = Y_INICIO_AREA_TEXTO
             
+            # Desenha a descrição
             for line in linhas_descricao:
                 line_w, line_h = get_text_dimensions(draw, line, fonte_descricao)
                 x_descricao = (LARGURA_BANNER - line_w) // 2 
@@ -224,7 +240,28 @@ def criar_banners_em_lote():
                 current_y += line_h + TEXT_LINE_SPACING
             
             y_inicio_preco = current_y + 30 
+            
+            # 🌟 DESENHA O PREÇO ORIGINAL (RISCADO) 🌟
+            if valor_original_exibicao:
+                texto_w_antigo, texto_h_antigo = get_text_dimensions(draw, valor_original_exibicao, fonte_preco_antigo)
+                
+                x_antigo = (LARGURA_BANNER - texto_w_antigo) // 2 
+                y_antigo = y_inicio_preco
+                
+                # Desenha o texto do preço antigo
+                desenhar_texto(draw, (x_antigo, y_antigo), valor_original_exibicao, fonte_preco_antigo, COR_PRECO_ANTIGO)
+                
+                # Desenha a linha de risco
+                x_linha1 = x_antigo + 5 
+                y_linha = y_antigo + texto_h_antigo // 2
+                x_linha2 = x_antigo + texto_w_antigo - 5
+                
+                draw.line([(x_linha1, y_linha), (x_linha2, y_linha)], fill=COR_PRECO_ANTIGO, width=8)
+                
+                # Ajusta o Y inicial para o preço promocional ficar abaixo do riscado
+                y_inicio_preco += texto_h_antigo + 10 
 
+            # DESENHA O PREÇO PROMOCIONAL (NOVO)
             texto_w_valor, texto_h_valor = get_text_dimensions(draw, valor_exibicao, fonte_valor)
             
             x_valor = (LARGURA_BANNER - texto_w_valor) // 2 
@@ -232,7 +269,7 @@ def criar_banners_em_lote():
             
             desenhar_texto(draw, (x_valor, y_valor), valor_exibicao, fonte_valor, COR_PRECO_DESTAQUE)
             
-            # 9. Salvando o Banner
+            # Salvando o Banner
             caminho_saida = os.path.join(PASTA_SAIDA, f"banner_{codigo_produto}.png")
             banner_final.save(caminho_saida)
             
