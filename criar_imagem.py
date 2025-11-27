@@ -9,6 +9,7 @@ PASTA_SAIDA = 'banners_prontos'
 EXTENSOES_POSSIVEIS = ['jpg', 'jpeg', 'png']
 NOME_FONTE = "arialbd.ttf" # Arial Bold para destaque
 LOGO_AMAISCICLO_FILE = 'amaisciclo.jpeg' 
+IMAGEM_FUNDO_FILE = 'fundo_padrao.jpg'
 
 # --- Configurações do Layout ---
 LARGURA_BANNER = 1080
@@ -16,9 +17,9 @@ ALTURA_BANNER = 1350
 COR_FUNDO = 'white'
 
 # --- Configurações de Área ---
-ALTURA_IMAGEM_PRODUTO_MAX = 1050 
-Y_INICIO_AREA_TEXTO = 1050
-LARGURA_MAX_TEXTO = LARGURA_BANNER - 120 
+ALTURA_IMAGEM_PRODUTO_MAX = 680
+Y_INICIO_AREA_TEXTO = 1000
+LARGURA_MAX_TEXTO = LARGURA_BANNER - 100 
 
 # --- Configurações de Texto e Cores ---
 COR_PRECO_DESTAQUE = (200, 0, 0) 
@@ -32,10 +33,9 @@ TEXTO_BANNER_DESTAQUE_PRINCIPAL = "PROMOÇÃO"
 COR_BANNER_DESTAQUE_PRINCIPAL = (255, 204, 0) # Amarelo vibrante
 COR_TEXTO_BANNER_DESTAQUE = 'black'
 
-ALTURA_DESTAQUE_PRINCIPAL = 100
-# ⬇️ POSIÇÕES AJUSTADAS para o banner de destaque
-POS_X_DESTAQUE = 200 # Posição X inicial do banner principal (amarelo)
-POS_Y_DESTAQUE = 180 # Posição Y inicial do banner principal (amarelo) 
+ALTURA_DESTAQUE_PRINCIPAL = 130
+POS_X_DESTAQUE = 220 # Posição X inicial do banner principal (amarelo)
+POS_Y_DESTAQUE = 200 # Posição Y inicial do banner principal (amarelo) 
 TAMANHO_FONTE_DESTAQUE_PRINCIPAL = 100
 
 # --- Funções Auxiliares ---
@@ -97,7 +97,7 @@ def criar_banners_em_lote():
 
     try:
         font_path = NOME_FONTE
-        fonte_descricao = ImageFont.truetype(font_path, 50) 
+        fonte_descricao = ImageFont.truetype(font_path, 45) 
         fonte_valor = ImageFont.truetype(font_path, 100) 
         # Fontes para os banners de destaque
         fonte_destaque_principal = ImageFont.truetype(font_path, TAMANHO_FONTE_DESTAQUE_PRINCIPAL)
@@ -135,7 +135,44 @@ def criar_banners_em_lote():
                 print(f"ERRO (Linha {index+2} - Código {codigo_produto}): Imagem não encontrada.")
                 continue
             
-            banner_final = Image.new('RGB', (LARGURA_BANNER, ALTURA_BANNER), color=COR_FUNDO)
+            banner_final = None
+            try:
+                # Tenta abrir o arquivo de fundo
+                img_fundo = Image.open(IMAGEM_FUNDO_FILE).convert("RGB")
+                
+                # Redimensiona para cobrir todo o banner (Mantém a proporção e corta as bordas)
+                proporcao_banner = LARGURA_BANNER / ALTURA_BANNER
+                proporcao_fundo = img_fundo.width / img_fundo.height
+                
+                if proporcao_fundo > proporcao_banner:
+                    # Fundo é mais largo, redimensiona pela altura
+                    nova_altura = ALTURA_BANNER
+                    nova_largura = int(img_fundo.width * (nova_altura / img_fundo.height))
+                    img_fundo = img_fundo.resize((nova_largura, nova_altura))
+                    # Centraliza
+                    x_corte = (nova_largura - LARGURA_BANNER) // 2
+                    img_fundo = img_fundo.crop((x_corte, 0, x_corte + LARGURA_BANNER, ALTURA_BANNER))
+                else:
+                    # Fundo é mais alto, redimensiona pela largura
+                    nova_largura = LARGURA_BANNER
+                    nova_altura = int(img_fundo.height * (nova_largura / img_fundo.width))
+                    img_fundo = img_fundo.resize((nova_largura, nova_altura))
+                    # Centraliza
+                    y_corte = (nova_altura - ALTURA_BANNER) // 2
+                    img_fundo = img_fundo.crop((0, y_corte, LARGURA_BANNER, y_corte + ALTURA_BANNER))
+                    
+                banner_final = img_fundo.copy()
+                print(f"Fundo '{IMAGEM_FUNDO_FILE}' adicionado.")
+
+            except FileNotFoundError:
+                # Caso o arquivo não exista, usa a cor sólida
+                print(f"AVISO: Arquivo de fundo '{IMAGEM_FUNDO_FILE}' não encontrado. Usando cor sólida.")
+                banner_final = Image.new('RGB', (LARGURA_BANNER, ALTURA_BANNER), color=COR_FUNDO)
+            except Exception as e:
+                print(f"ERRO ao carregar/redimensionar fundo: {e}. Usando cor sólida.")
+                banner_final = Image.new('RGB', (LARGURA_BANNER, ALTURA_BANNER), color=COR_FUNDO)
+
+
             draw = ImageDraw.Draw(banner_final)
             
             # 6. Colocando a Imagem do Produto
@@ -186,7 +223,7 @@ def criar_banners_em_lote():
                 desenhar_texto(draw, (x_descricao, current_y), line, fonte_descricao, COR_TEXTO_DESCRICAO)
                 current_y += line_h + TEXT_LINE_SPACING
             
-            y_inicio_preco = current_y + 10 
+            y_inicio_preco = current_y + 30 
 
             texto_w_valor, texto_h_valor = get_text_dimensions(draw, valor_exibicao, fonte_valor)
             
