@@ -10,7 +10,7 @@ PASTA_SAIDA = 'banners_prontos_avista'
 EXTENSOES_POSSIVEIS = ['jpg', 'jpeg', 'png']
 NOME_FONTE = "arialbd.ttf" # Arial Bold para destaque
 LOGO_AMAISCICLO_FILE = 'amaisciclo.jpeg' 
-IMAGEM_FUNDO_FILE = ''
+IMAGEM_FUNDO_FILE = 'fundo_padrao.jpg'
 
 # --- Configurações do Layout ---
 LARGURA_BANNER = 1080
@@ -18,7 +18,13 @@ ALTURA_BANNER = 1350
 COR_FUNDO = 'white'
 
 # --- Configurações de Área ---
-ALTURA_IMAGEM_PRODUTO_MAX = 650
+# VAI SER SUBSTITUÍDO PELA LARGURA/ALTURA FIXA
+# ALTURA_IMAGEM_PRODUTO_MAX = 650 
+
+# NOVO: Tamanho fixo da área do produto (por exemplo, 600x600)
+LARGURA_IMAGEM_FIXA = 600
+ALTURA_IMAGEM_FIXA = 600
+
 Y_INICIO_AREA_TEXTO = 1000
 LARGURA_MAX_TEXTO = LARGURA_BANNER - 100 
 
@@ -209,7 +215,7 @@ def criar_banners_em_lote():
                     img_fundo = img_fundo.resize((nova_largura, nova_altura))
                     y_corte = (nova_altura - ALTURA_BANNER) // 2
                     img_fundo = img_fundo.crop((0, y_corte, LARGURA_BANNER, y_corte + ALTURA_BANNER))
-                        
+                    
                 banner_final = img_fundo.copy()
 
             except FileNotFoundError:
@@ -220,12 +226,30 @@ def criar_banners_em_lote():
 
             draw = ImageDraw.Draw(banner_final)
             
-            # Colocando a Imagem do Produto e Logo
-            img_produto = Image.open(caminho_imagem_base).convert("RGB")
-            img_produto.thumbnail((LARGURA_BANNER, ALTURA_IMAGEM_PRODUTO_MAX))
-            x_img_centralizada = (LARGURA_BANNER - img_produto.width) // 2
-            y_img_centralizada = 300 
-            banner_final.paste(img_produto, (x_img_centralizada, y_img_centralizada))
+            # 🌟 NOVA LÓGICA: Colocando a Imagem do Produto em uma Área de Tamanho Fixo 🌟
+            
+            # 1. Cria uma área de imagem temporária, de tamanho fixo (600x600), com fundo branco para enquadramento
+            area_produto_fixa = Image.new('RGB', (LARGURA_IMAGEM_FIXA, ALTURA_IMAGEM_FIXA), color='white')
+            
+            # 2. Abre a imagem do produto
+            img_produto_original = Image.open(caminho_imagem_base).convert("RGB")
+            
+            # 3. Redimensiona a imagem do produto para que caiba DENTRO da área fixa, mantendo a proporção (thumbnail)
+            # Isso garante que a imagem não seja distorcida, mas ainda é limitada ao tamanho da área.
+            img_produto_original.thumbnail((LARGURA_IMAGEM_FIXA, ALTURA_IMAGEM_FIXA))
+            
+            # 4. Centraliza a imagem redimensionada na área fixa (preenchendo com branco o espaço restante)
+            x_central_produto = (LARGURA_IMAGEM_FIXA - img_produto_original.width) // 2
+            y_central_produto = (ALTURA_IMAGEM_FIXA - img_produto_original.height) // 2
+            
+            area_produto_fixa.paste(img_produto_original, (x_central_produto, y_central_produto))
+            
+            # 5. Cola a área fixa (agora com o produto dentro) no banner
+            x_final_centralizado = (LARGURA_BANNER - LARGURA_IMAGEM_FIXA) // 2
+            y_final_centralizado = 300 # Posição Y onde você quer que a área de 600x600 comece
+            
+            banner_final.paste(area_produto_fixa, (x_final_centralizado, y_final_centralizado))
+            # ----------------------------------------------------------------------------------
     
             colar_logo(
                 banner_final, 
@@ -249,7 +273,7 @@ def criar_banners_em_lote():
             
             y_inicio_preco = current_y + 30 
             
-            # 🌟 NOVO: DESENHA O PREÇO "A PRAZO" (SEM RISCO) 🌟
+            # 🌟 DESENHA O PREÇO "A PRAZO" (SEM RISCO) 🌟
             if valor_original_exibicao:
                 texto_w_antigo, texto_h_antigo = get_text_dimensions(draw, valor_original_exibicao, fonte_preco_antigo)
                 texto_w_ap, texto_h_ap = get_text_dimensions(draw, TEXTO_A_PRAZO, fonte_a_prazo)
