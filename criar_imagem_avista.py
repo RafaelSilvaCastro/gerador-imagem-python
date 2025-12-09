@@ -39,7 +39,7 @@ TAMANHO_FONTE_A_PRAZO = 40 # NOVO: Tamanho para o texto 'A PRAZO'
 
 # --- Configuração Adicional para o Bloco de Preço ---
 TEXTO_A_VISTA = "À VISTA"
-TEXTO_A_PRAZO = "A PRAZO"
+TEXTO_A_PRAZO = "A PRAZO" # NOVO: Texto para o preço 'A PRAZO'
 SPACER_PRECO_AVISTA = 20 # Espaçamento entre o preço e o texto 'À VISTA'
 SPACER_PRECO_APRAZO = 15 # NOVO: Espaçamento para o texto 'A PRAZO'
 
