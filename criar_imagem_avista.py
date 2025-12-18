@@ -33,15 +33,15 @@ TEXT_LINE_SPACING = 20
 
 # --- CONFIGURAÇÕES DE FONTE ---
 TAMANHO_FONTE_DESTAQUE_PRINCIPAL = 100
-TAMANHO_FONTE_PRECO_ANTIGO = 55 # Tamanho do preço 'A PRAZO' (Não mais riscado)
+TAMANHO_FONTE_PRECO_ANTIGO = 55 # Tamanho do preço 'A PRAZO' 
 TAMANHO_FONTE_A_VISTA = 50 # Tamanho para o texto 'À VISTA'
 TAMANHO_FONTE_A_PRAZO = 40 # NOVO: Tamanho para o texto 'A PRAZO'
 
 # --- Configuração Adicional para o Bloco de Preço ---
 TEXTO_A_VISTA = "À VISTA"
-TEXTO_A_PRAZO = "A PRAZO" # NOVO: Texto para o preço 'A PRAZO'
+TEXTO_A_PRAZO = "A PRAZO" # Texto para o preço 'A PRAZO'
 SPACER_PRECO_AVISTA = 20 # Espaçamento entre o preço e o texto 'À VISTA'
-SPACER_PRECO_APRAZO = 15 # NOVO: Espaçamento para o texto 'A PRAZO'
+SPACER_PRECO_APRAZO = 15 # Espaçamento para o texto 'A PRAZO'
 
 
 # --- Funções Auxiliais ---
@@ -127,7 +127,7 @@ def criar_banners_em_lote():
         fonte_preco_antigo = ImageFont.truetype(font_path, TAMANHO_FONTE_PRECO_ANTIGO) 
         fonte_destaque_principal = ImageFont.truetype(font_path, TAMANHO_FONTE_DESTAQUE_PRINCIPAL)
         fonte_a_vista = ImageFont.truetype(font_path, TAMANHO_FONTE_A_VISTA)
-        # NOVO: Fonte para o "A PRAZO"
+        # Fonte para o "A PRAZO"
         fonte_a_prazo = ImageFont.truetype(font_path, TAMANHO_FONTE_A_PRAZO) 
     except IOError:
         print(f"AVISO: Fonte '{NOME_FONTE}' não encontrada. Usando fonte padrão. Tente 'arial.ttf'.")
